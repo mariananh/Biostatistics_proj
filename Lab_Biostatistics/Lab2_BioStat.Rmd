@@ -1,0 +1,333 @@
+---
+title: 'Lab 2: Diagnostic Tests'
+author: "M. Rosário Oliveira & Catarina Loureiro - Biostatistics (LMAC/MECD/MMAC)"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    extra_dependencies:
+      caption: labelfont={bf}
+      hyperref: null
+      xcolor: null
+---
+
+------------------------------------------------------------------------
+
+Report your answers to the following questions in an R Markdown file. Submit your answers by the 20th of March 2025, 23:59, on the Fenix webpage.
+
+Add your group number and the students' name and number of its members in the file:
+
+-   **Group Number:**
+
+-   **Name and Number - Group Member 1: Mariana Henriques 103165**
+
+-   **Name and Number - Group Member 2:**
+
+------------------------------------------------------------------------
+
+Consider the following dataset referring to the results of 3 diagnostic tests.
+
+| Test A   | Test B   | Test C   | Frequency observed |
+|----------|----------|----------|--------------------|
+| Positive | Positive | Positive | 34                 |
+| Positive | Positive | Negative | 12                 |
+| Positive | Negative | Positive | 19                 |
+| Negative | Positive | Positive | 11                 |
+| Positive | Negative | Negative | 23                 |
+| Negative | Positive | Negative | 59                 |
+| Negative | Negative | Positive | 21                 |
+| Negative | Negative | Negative | 1513               |
+
+### Exercise 1: Measures of performance
+
+Assuming that test A is an imperfect gold standard, estimate the following performance measures of Test C:
+
+1.  Sensitivity;
+2.  Specificity;
+3.  Positive predictive value;
+4.  Negative predicted value;
+5.  Youden's index;
+6.  Positive Diagnostic Likelihood Ratio;
+7.  Negative Diagnostic Likelihood Ratio;
+8.  Prevalence.
+
+Interpret your findings.
+
+```{r}
+
+# Create the dataset as provided
+data <- data.frame(
+  TestA = c("Positive", "Positive", "Positive", "Negative", "Positive", "Negative", "Negative", "Negative"),
+  TestB = c("Positive", "Positive", "Negative", "Positive", "Negative", "Positive", "Negative", "Negative"),
+  TestC = c("Positive", "Negative", "Positive", "Positive", "Negative", "Negative", "Positive", "Negative"),
+  Frequency = c(34, 12, 19, 11, 23, 59, 21, 1513)
+)
+
+# Considering Test A as the imperfect gold standard
+# Sensitivity, Specificity, PPV, NPV, Youden's index, likelihood ratios, prevalence
+
+# Create contingency table for Test C vs Test A
+library(dplyr)
+
+# True Positives, False Positives, True Negatives, False Negatives
+TP <- sum(data %>% filter(TestA == "Positive" & TestC == "Positive") %>% pull(Frequency))
+FN <- sum(data %>% filter(TestA == "Positive" & TestC == "Negative") %>% pull(Frequency))
+FP <- sum(data %>% filter(TestA == "Negative" & TestC == "Positive") %>% pull(Frequency))
+TN <- sum(data %>% filter(TestA == "Negative" & TestC == "Negative") %>% pull(Frequency))
+
+# Sensitivity
+Sensitivity <- TP / (TP + FN)
+
+# Specificity
+Specificity <- TN / (TN + FP)
+
+# Positive predictive value (PPV)
+PPV <- TP / (TP + FP)
+
+# Negative predictive value (NPV)
+NPV <- TN / (TN + FN)
+
+# Youden's Index
+Youdens_index <- Sensitivity + Specificity - 1
+
+# Positive Diagnostic Likelihood Ratio (DLR+)
+DLR_positive <- Sensitivity / (1 - Specificity)
+
+# Negative Diagnostic Likelihood Ratio (DLR-)
+DLR_negative <- (1 - Sensitivity) / Specificity
+
+# Prevalence (according to Test A)
+Prevalence <- (TP + FN) / sum(data$Frequency)
+
+# Results
+results <- list(
+  Sensitivity = Sensitivity,
+  Specificity = Specificity,
+  Positive_Predictive_Value = PPV,
+  Negative_Predictive_Value = NPV,
+  Youdens_index = Youdens_index,
+  Positive_Likelihood_Ratio = DLR_positive,
+  Negative_Likelihood_Ratio = DLR_negative,
+  Prevalence = Prevalence
+)
+
+# Print the results
+print(results)
+
+```
+
+The Test C has approximately 60% of sensitivity, which means that it detects 60.2% of patients with the disease (true positives), but approximately 40% with the disease go undetected (false negatives).
+
+The Test C has a specificity of 98%, approximately, which means it correctly identifies 98% of the people who do not have the disease, but it does not pick up the 2% who receive false positives.
+
+The Test C has a positive predictive value of 62.4%, approximately, which means among individuals who test positive on Test C, about 63.4% truly have the disease (true positives) and about 37.6% of positives may actually not have the disease (false positives).
+
+The Test C has a negative predictive value of 97.8%, approximately, which means among individuals who test negative on Test C, about 97.8% don't have the disease (true negatives).
+
+The Test C has a Youden's Index of 0.58, approximately, which suggests a moderate overall diagnostic performance. The closer to 1, the better. This is, test C has good overall discrimination ability but still has room for improvement, particularly in sensitivity.
+
+The Test C has a positive diagnostic likelihood ratio of 30.19, approximately. This means that a positive result on Test C is approximately 30 times more likely to occur in an individual with the condition than in one without it.
+
+The Test C has a negative diagnostic likelihood ratio of 0.41,approximately. This means that a negative result on Test C slightly reduces the likelihood of the condition (0.41 times).
+
+The Test C has a prevalence og 5.2%, approximately, which means around 5.2% of your studied population has the condition, based on your imperfect gold standard (Test A).
+
+------------------------------------------------------------------------
+
+### Exercise 2: Confidence intervals for binomial proportions
+
+Compute the confidence intervals at a 95% confidence level for the sensitivity of Test C (using Test A as an imperfect reference), according to the following methods:
+
+1.  Wald test;
+2.  Clopper-Pearson;
+3.  Wilson.
+
+Visualize your findings. Get inspiration from:
+
+<https://www.geeksforgeeks.org/how-to-plot-a-confidence-interval-in-r/>
+
+Compare and discuss your findings.
+
+```{r}
+library(binom)
+library(ggplot2)
+
+#The function binom.confint() from the "binom" package in R calculates confidence intervals for binomial proportions, and the default alpha is 0.05, meaning it computes a 95% confidence interval
+
+wald_ci <- binom.confint(TP, TP + FN, method = "asymptotic")
+clopper_pearson_ci <- binom.confint(TP, TP + FN, method = "exact")
+wilson_ci <- binom.confint(TP, TP + FN, method = "wilson")
+
+
+print(paste("Sensitivity:", Sensitivity))
+print("Wald CI:")
+print(wald_ci)
+print("Clopper-Pearson CI:")
+print(clopper_pearson_ci)
+print("Wilson CI:")
+print(wilson_ci)
+
+ci_data <- data.frame(
+  Method = c("Wald", "Clopper-Pearson", "Wilson"),
+  Lower = c(wald_ci$lower, clopper_pearson_ci$lower, wilson_ci$lower),
+  Upper = c(wald_ci$upper, clopper_pearson_ci$upper, wilson_ci$upper)
+)
+
+ggplot(ci_data, aes(x = Method, y = (Lower + Upper) / 2)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +
+  labs(title = "95% Confidence Intervals for Sensitivity of Test C",
+       y = "Sensitivity",
+       x = "Method") +
+  theme_minimal()
+```
+
+```{r}
+
+##Testing to see if wald is giving me the right values
+
+# Compute Wald Confidence Interval for Sensitivity
+wald_ci_lower <- Sensitivity - 1.96 * sqrt((Sensitivity * (1 - Sensitivity)) / (TP + FN))
+wald_ci_upper <- Sensitivity + 1.96 * sqrt((Sensitivity * (1 - Sensitivity)) / (TP + FN))
+
+wald_ci_lower <- max(0, wald_ci_lower)
+wald_ci_upper <- min(1, wald_ci_upper)
+
+print(paste("Wald CI for Sensitivity: [", round(wald_ci_lower, 4), ",", round(wald_ci_upper, 4), "]"))
+```
+
+All three methods are close to each other.
+
+Wald CI and Wilson CI have very similar widths and centers. Clopper-Pearson CI is slightly wider due to its exact nature, being more conservative, especially with smaller sample sizes or proportions near the boundaries (0 or 1).
+
+------------------------------------------------------------------------
+
+### Exercise 3: Composite reference standard
+
+Repeat Exercise 2 considering for imperfect reference test:
+
+1.  Test A and B combined with the "and" rule.
+2.  Test A and B combined with the "or" rule.
+
+Compare and discuss your findings with the previous exercise.
+
+```{r}
+# AND Rule (Both Test A and B positive)
+TP_and <- sum(data %>% filter(TestA == "Positive" & TestB == "Positive" & TestC == "Positive") %>% pull(Frequency))
+FN_and <- sum(data %>% filter(TestA == "Positive" & TestB == "Positive" & TestC == "Negative") %>% pull(Frequency))
+total_and <- TP_and + FN_and
+
+# OR Rule (Either Test A or Test B positive)
+TP_or <- sum(data %>% filter((TestA == "Positive" | TestB == "Positive") & TestC == "Positive") %>% pull(Frequency))
+FN_or <- sum(data %>% filter((TestA == "Positive" | TestB == "Positive") & TestC == "Negative") %>% pull(Frequency))
+total_or <- TP_or + FN_or
+
+# Compute Sensitivity for AND and OR rules
+sensitivity_and <- TP_and / total_and
+sensitivity_or <- TP_or / total_or
+
+# Compute Confidence Intervals
+wald_ci_and <- binom.confint(TP_and, total_and, method = "asymptotic")
+clopper_pearson_ci_and <- binom.confint(TP_and, total_and, method = "exact")
+wilson_ci_and <- binom.confint(TP_and, total_and, method = "wilson")
+
+wald_ci_or <- binom.confint(TP_or, total_or, method = "asymptotic")
+clopper_pearson_ci_or <- binom.confint(TP_or, total_or, method = "exact")
+wilson_ci_or <- binom.confint(TP_or, total_or, method = "wilson")
+
+# Create DataFrame for visualization
+ci_data <- data.frame(
+  Method = rep(c("Wald", "Clopper-Pearson", "Wilson"), 2),
+  Rule = c(rep("AND", 3), rep("OR", 3)),
+  Lower = c(wald_ci_and$lower, clopper_pearson_ci_and$lower, wilson_ci_and$lower, 
+            wald_ci_or$lower, clopper_pearson_ci_or$lower, wilson_ci_or$lower),
+  Upper = c(wald_ci_and$upper, clopper_pearson_ci_and$upper, wilson_ci_and$upper, 
+            wald_ci_or$upper, clopper_pearson_ci_or$upper, wilson_ci_or$upper)
+)
+
+# Visualization of confidence intervals
+ggplot(ci_data, aes(x = Method, y = (Lower + Upper) / 2, color = Rule)) +
+  geom_point(size = 3, position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2, position = position_dodge(width = 0.5)) +
+  labs(title = "95% Confidence Intervals for Sensitivity of Test C (Composite Reference)",
+       y = "Sensitivity",
+       x = "Method") +
+  theme_minimal()
+
+```
+
+When applying the AND rule, the estimated sensitivity of Test C was noticeably higher compared to using Test A alone. This is because the AND rule results in a more specific reference standard, meaning fewer cases qualify as "truly positive". It reduces the number of false positives in the reference, leading to a higher estimated sensitivity for Test C. However, this also means that the reference standard is more likely to miss true positives cases, increasing the number of false negatives.
+
+On the other hand, the OR rule produced a much lower estimated sensitivity for Test C. Since the OR rule includes any case where either Test A or Test B is positive, the total number of reference positives increases. It reduces false negatives in the reference standard but increases false positives, leading to a lower sensitivity estimate for Test C. The confidence intervals for the OR rule were also wider, indicating more uncertainty in the sensitivity estimate.
+
+Compared to using Test A alone, the findings confirm that the choice of reference standard has a significant impact on the estimated sensitivity of Test C. The AND rule results in a higher sensitivity estimate, suggesting that Test C appears to perform better under a stricter reference standard. In contrast, the OR rule results in a lower sensitivity estimate, showing that Test C performs worse when the reference is more inclusive. The sensitivity estimate using only Test A as a reference falls between the AND and OR results, indicating that a single test reference may not be the most reliable approach.
+
+------------------------------------------------------------------------
+
+### Exercise 4: Confidence intervals for the relative risk
+
+Compute the relative risk of Test B and C (using Test A as an imperfect reference) and the associated 99% approximate confidence interval. Is there any statistical evidence that the relative risk is one, at a 1% significance level? Visualize your findings adding a line marking the value of a relative risk equal to 1.
+
+Interpret your findings.
+
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+
+# Create a contingency table for Test B and Test C
+B_pos_C_pos <- sum(data %>% filter(TestB == "Positive" & TestC == "Positive") %>% pull(Frequency))
+B_pos_C_neg <- sum(data %>% filter(TestB == "Positive" & TestC == "Negative") %>% pull(Frequency))
+B_neg_C_pos <- sum(data %>% filter(TestB == "Negative" & TestC == "Positive") %>% pull(Frequency))
+B_neg_C_neg <- sum(data %>% filter(TestB == "Negative" & TestC == "Negative") %>% pull(Frequency))
+
+# Compute relative risk
+risk_B_pos <- B_pos_C_pos / (B_pos_C_pos + B_pos_C_neg)
+risk_B_neg <- B_neg_C_pos / (B_neg_C_pos + B_neg_C_neg)
+relative_risk <- risk_B_pos / risk_B_neg
+
+# Compute 99% confidence interval for RR
+ln_rr <- log(relative_risk)
+se_ln_rr <- sqrt((1 / B_pos_C_pos) - (1 / (B_pos_C_pos + B_pos_C_neg)) + (1 / B_neg_C_pos) - (1 / (B_neg_C_pos + B_neg_C_neg)))
+z_value <- qnorm(1 - 0.01 / 2)  # 99% CI (z-score for 99% confidence)
+ci_lower <- exp(ln_rr - z_value * se_ln_rr)
+ci_upper <- exp(ln_rr + z_value * se_ln_rr)
+
+# Determine statistical significance
+statistical_evidence <- ifelse(ci_lower <= 1 & ci_upper >= 1, "No", "Yes")
+
+# Create a data frame for visualization
+rr_data <- data.frame(
+  Method = "Relative Risk",
+  RR = relative_risk,
+  Lower = ci_lower,
+  Upper = ci_upper
+)
+
+# Visualization
+ggplot(rr_data, aes(x = Method, y = RR)) +
+  geom_point(size = 4, color = "blue") +
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2, color = "black") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red", size = 1) +
+  labs(title = "99% Confidence Interval for Relative Risk (Test B vs. Test C)",
+       y = "Relative Risk",
+       x = "") +
+  theme_minimal()
+
+# Print results
+cat("Relative Risk:", round(relative_risk, 4), "\n")
+cat("99% Confidence Interval: (", round(ci_lower, 4), ",", round(ci_upper, 4), ")\n")
+cat("Statistical Evidence that RR ≠ 1 at 1% level:", statistical_evidence, "\n")
+
+```
+
+The results of this analysis provide strong statistical evidence of an association between Test B and Test C, using Test A as an imperfect reference standard. The estimated relative risk is 15.28, meaning that individuals who test positive in Test B are approximately 15 times more likely to also test positive in Test C compared to those who test negative in Test B.
+
+The 99% confidence interval for the relative risk ranges from 9.25 to 25.25. We can reject the null hypothesis (RR = 1), which states that there is no association between Test B and Test C. The fact that the entire confidence interval lies well above 1 confirms that individuals with a positive result in Test B have a much higher likelihood of testing positive in Test C.

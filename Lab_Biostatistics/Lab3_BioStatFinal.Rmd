@@ -1,0 +1,246 @@
+---
+title: 'Lab 3: Analysis of Variance'
+author: "M. Rosário Oliveira & Catarina Loureiro - Biostatistics (LMAC/MECD/MMAC)"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    extra_dependencies:
+      caption: labelfont={bf}
+      hyperref: null
+      xcolor: null
+---
+
+------------------------------------------------------------------------
+
+Report your answers to the following questions in an R Markdown file. Submit your answers by the 3rd of April 2025, 23:59, on the Fenix webpage.
+
+Add your group number and the students' name and number of its members in the file:
+
+-   **Group Number:**
+
+-   **Name and Number - Group Member 1: Mariana Henriques 103165**
+
+-   **Name and Number - Group Member 2: Daniel Bartolomeu 106182**
+
+------------------------------------------------------------------------
+
+Consider the following dataset available at: <https://www.itl.nist.gov/div898/software/dataplot/data/RODRIGUEZ4.DAT>
+
+### Exercise 1: Two-way ANOVA
+
+A researcher plans to test the following hypotheses:
+
+> -   *There is no difference between the cell types*.
+>
+> -   *There is no difference between the instruments.*
+>
+> -   *There is no interaction between the cell types and instruments*.
+
+1.  Do appropriate plots and explore your data in order to discuss the previous hypotheses.
+
+    ```{r}
+    library(tidyverse)
+    library(ggplot2)
+    library(car)
+
+    # Read the data by skipping the header lines (first 25 lines)
+    df <- read.table("https://www.itl.nist.gov/div898/software/dataplot/data/RODRIGUEZ4.DAT",
+                     skip = 25, header = FALSE)
+
+    # Assign appropriate column names (Y corresponds to Modified G, X1 to Cell, X2 to Instrument)
+    colnames(df) <- c("ModifiedG", "Cell", "Instrument")
+
+    # Convert 'Cell' to a factor with descriptive labels.
+    df$Cell <- factor(df$Cell, levels = 1:8,
+                      labels = c("HDFn", "HEKn",
+                                 "TE Skin Fibro (A)-1", "TE Skin Fibro (A)-2",
+                                 "TE Skin Fibro (B)-1", "TE Skin Fibro (B)-2",
+                                 "HeLa", "ctDNA"))
+
+    # Convert 'Instrument' to a factor with descriptive labels.
+    df$Instrument <- factor(df$Instrument, levels = c(1, 2),
+                            labels = c("GC/MS", "LC/MS"))
+
+    # Display a summary of the data
+    summary(df)
+
+    # Boxplot for ModifiedG by Cell Type
+    boxplot(ModifiedG ~ Cell, data = df,
+            main = "Modified G by Cell Type",
+            #xlab = "Cell Type", ylab = "Modified G per million bases",
+            las = 2, col = "lightblue")
+
+    # Boxplot for ModifiedG by Instrument
+    boxplot(ModifiedG ~ Instrument, data = df,
+            main = "Modified G by Instrument",
+            xlab = "Instrument", ylab = "Modified G per million bases",
+            col = "lightgreen")
+
+    interaction.plot(x.factor = df$Cell,
+                     trace.factor = df$Instrument,
+                     response = df$ModifiedG,
+                     type = "b",         # both points and lines
+                     pch = c(1, 2),      # different symbols for each instrument
+                     col = c("red", "blue"),
+                     main = "Interaction Plot: Cell Type vs. Instrument",
+                     xlab = "Cell Type",
+                     ylab = "Mean Modified G")
+    ```
+
+2.  Does your analysis suggest that any factor effects are present? Explain.
+
+Yes, the analysis suggests that significant effects are present for both main factors and their interaction.
+
+-   Cell Type: Cell type seems to have a strong effect. From the first plot, which breaks down Modified G levels by cell type, we see some pretty clear differences. Some cell types like HeLa show high levels of Modified G, while others like ctDNA and Fibro (A)-2 show much lower values.
+
+-   Instrument: The instrument might be having an effect, but it’s not nearly as dramatic as the differences between cell types. The second plot compares Modified G measurements from two instruments: GC/MS and LC/MS. Here, the difference is more subtle. LC/MS appears to give slightly higher values on average, but there’s still a fair bit of overlap between the two.
+
+-   Interaction (Cell × Instrument): There’s strong visual evidence that cell type and instrument don’t act independently. The way one affects the results depends on the other. The interaction plot shows how the two instruments perform across different cell types. If the lines were mostly parallel, it would mean both instruments behave similarly no matter the cell type. In this case, the lines cross and split in different directions (for example, for Fibro (A)-2, LC/MS gives a noticeably higher value, while for HeLa, both instruments spike but not equally). These crossing lines suggest that the instrument's effect changes depending on the cell type.
+
+3.  Test the hypotheses stated before. In each case, compute the $p$-value and state the associated alternatives, decision rule, and conclusion. Do the results confirm your graphical analysis?
+
+```{r}
+# Fit the two-way ANOVA model (including interaction)
+model_tw <- aov(ModifiedG ~ Cell * Instrument, data = df)
+summary(model_tw)
+```
+
+Cell Type Effect:
+
+-   Null Hypothesis ($H_0$): All cell type means are equal.
+-   Alternative Hypothesis ($H_1$): At least one cell type mean is different.
+-   p-value: 1.66e-10\
+-   Decision Rule: Reject $H_0$ if p-value \< 0.05.
+-   Conclusion: Since 1.66e-10 \< 0.05, we reject $H_0$. There is a significant difference among the cell types.
+
+Instrument Effect:
+
+-   Null Hypothesis ($H_0$): The means for GC/MS and LC/MS are equal.
+-   Alternative Hypothesis ($H_1$): The means for GC/MS and LC/MS are different.
+-   p-value: 0.00938\
+-   Decision Rule: Reject $H_0$ if p-value \< 0.05.
+-   Conclusion: Since 0.00938 \< 0.05, we reject $H_0$. There is a significant difference between instruments.
+
+Interaction Effect (Cell × Instrument):
+
+-   Null Hypothesis ($H_0$): There is no interaction between cell type and instrument.
+
+-   Alternative Hypothesis ($H_1$): There is an interaction between cell type and instrument.
+
+-   p-value: 0.01788\
+
+-   Decision Rule: Reject $H_0$ if p-value \< 0.05.
+
+-   Conclusion: Since 0.01788 \< 0.05, we reject $H_0$. The effect of cell type depends on the instrument used, indicating a significant interaction.
+
+    \
+    The results of the two-way ANOVA (i.e., the significant p-values for cell type, instrument, and their interaction) are consistent with the visual analysis provided by the boxplots and interaction plot. Both approaches clearly suggest that differences exist among cell types and instruments, and that the relationship between cell type and modified G levels changes depending on the instrument.
+
+------------------------------------------------------------------------
+
+### Exercise 2: One-way ANOVA
+
+In the previous example, only consider the cell type and the hypothesis:
+
+> -   *There is no difference between the cell types.*
+
+1.  Test the previous hypothesis. Compute the $p$-value and state the associated alternative, decision rule, and conclusion. Do the results confirm your findings in Exercise 1?
+
+    Hypotheses:
+
+    -   Null Hypothesis (H₀): All cell type means are equal.
+    -   Alternative Hypothesis (H₁): At least one cell type mean differs.
+
+    Results:
+
+    -   p-value: 1.67e-09
+
+    -   Decision Rule: Reject H₀ if p-value \< 0.05.
+
+    -   Conclusion: Since the p-value (1.67e-09) is much less than 0.05, we reject H₀. This indicates a statistically significant difference among the cell types.
+
+        \
+        These results confirm the findings from Exercise 1 (two-way ANOVA), where Cell Type also showed a highly significant effect.
+
+    ```{r}
+    # Install rcompanion if not already installed
+    if (!require(rcompanion)) {
+      install.packages("rcompanion")
+      library(rcompanion)
+    }
+    # Fit the one-way ANOVA model for cell type only
+    model_one <- aov(ModifiedG ~ Cell, data = df)
+    summary(model_one)
+    ```
+
+2.  The model imposes assumptions about the error term. Enumerate those assumptions and use graphical displays to discuss the validity of the mentioned assumptions.
+
+    Assumptions of the ANOVA Model:
+
+    1.  Independence: Observations are independent.
+    2.  Normality: The residuals (errors) are normally distributed.
+    3.  Homoscedasticity: The variances of the residuals are equal across groups.
+
+    Graphical Diagnostics:
+
+    -   Residuals vs. Fitted Plot: Should show no systematic pattern (indicating constant variance).
+    -   Normal Q-Q Plot: Residuals should lie approximately along the reference line (indicating normality).
+    -   Additional Plots (Scale-Location, Residuals vs. Leverage): Help confirm homoscedasticity and identify any influential observations.
+
+    The visual inspection of these diagnostic plots does not reveal any strong deviations from the assumptions.
+
+    ```{r}
+    # Plot diagnostics for the two-way ANOVA model
+    par(mfrow = c(2, 2))
+    plot(model_tw)
+    par(mfrow = c(1, 1))
+    ```
+
+3.  Use proper statistical tests to access the hypothesis of normality and homoscedasticity of the error terms.
+
+    Normality Test (Shapiro-Wilk):
+
+    -   Result: W = 0.97344, p-value = 0.4434
+    -   Interpretation: A p-value of 0.4434 suggests no evidence against the normality assumption of the residuals.
+
+    Homoscedasticity Test (Bartlett's Test):
+
+    -   Result: Bartlett's K-squared = 8.0956, df = 15, p-value = 0.9199
+    -   Interpretation: A p-value of 0.9199 indicates no evidence against the assumption of equal variances across groups.
+
+    Both formal tests support the validity of the ANOVA assumptions regarding normality and homogeneity of variances.
+
+    ```{r}
+    # Test for normality of residuals (Shapiro-Wilk test)
+    shapiro.test(residuals(model_tw))
+    # Test for homogeneity of variances (Bartlett's test)
+    bartlett.test(ModifiedG ~ interaction(Cell, Instrument), data = df)
+    ```
+
+4.  Repeat the test stated in Question 1 using a non-parametric approach. Compare and discuss the obtained results.
+
+    Non-Parametric Test Results (Scheirer-Ray-Hare):
+
+    -   Cell Effect: p = 0.00536 (significant)
+
+    -   Instrument Effect: p = 0.09963 (not significant at α = 0.05)
+
+    -   Interaction (Cell × Instrument): p = 0.39350 (not significant)
+
+        The Scheirer-Ray-Hare test confirms the significant effect of Cell Type (p = 0.00536), which is consistent with the one-way ANOVA result (p = 1.67e-09). However, for Instrument and the interaction, the non-parametric approach did not find significant effects. This discrepancy may be due to reduced power of the non-parametric test in small or unbalanced samples.
+
+        Overall, both the parametric and non-parametric approaches agree that Cell Type has a strong effect on the response. Differences in the significance of Instrument and the interaction highlight the sensitivity differences between the two methods.
+
+    ```{r}
+    # Perform the Scheirer-Ray-Hare test
+    scheirer <- scheirerRayHare(ModifiedG ~ Cell + Instrument, data = df)
+    scheirer
+    ```

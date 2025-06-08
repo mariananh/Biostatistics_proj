@@ -1,0 +1,350 @@
+---
+title: 'Lab 1: Hypothesis testing: Power function'
+author: "M. Rosário Oliveira & Catarina Loureiro - Biostatistics (LMAC/MECD/MMAC)"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    extra_dependencies:
+      caption: labelfont={bf}
+      hyperref: null
+      xcolor: null
+---
+
+------------------------------------------------------------------------
+
+Report your answers to the following questions in an R Markdown file. Submit your answers by the 6th of March 2025, 23:59, on the Fenix webpage.
+
+Add your group number and the students' name and number of its members in the file:
+
+-   **Group Number: 8**
+
+-   **Name and Number - Group Member 1:** Mariana Henriques 103165
+
+-   **Name and Number - Group Member 2:** Daniel Bartolomeu 106182
+
+------------------------------------------------------------------------
+
+### Exercise 1: The Pima Indians Diabetes Dataset
+
+The Pima Indians Diabetes Dataset, available on R (vide `library(mlbench)`), involves predicting the onset of diabetes within 5 years in Pima Indians given medical details. The considered patients are all females at least 21 years old of Pima Indian heritage.
+
+The variable names are as follows:
+
+-   Number of times pregnant.
+-   Plasma glucose concentration a 2 hours in an oral glucose tolerance test.
+-   Diastolic blood pressure (mm Hg).
+-   Triceps skinfold thickness (mm).
+-   2-Hour serum insulin (mu U/ml).
+-   Body mass index (weight in kg/(height in m)$^2$).
+-   Diabetes pedigree function.
+-   Age (years).
+-   Class variable (0 or 1), where class value 1 is interpreted as "tested positive for diabetes"
+
+Missing values are encoded as zero.
+
+```{r}
+library(mlbench)
+data(PimaIndiansDiabetes)
+dim(PimaIndiansDiabetes)
+levels(PimaIndiansDiabetes$diabetes)
+head(PimaIndiansDiabetes)
+```
+
+Additional information is available at: <https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.names>
+
+#### Exercise 1.a: Exploratory data analysis
+
+Explore the data set using descriptive statistics and interesting ways to visualize your findings.
+
+The Pima Indians Diabetes dataset consists of three types of variables: discrete, categorical, and continuous. The number of times pregnant is a discrete variable, representing a countable quantity. The diabetes outcome is a categorical variable, recorded as "pos" (positive for diabetes) or "neg" (negative for diabetes). The remaining variables—glucose, blood pressure, skinfold thickness, insulin, BMI, diabetes pedigree function, and age—are continuous, as they take a wide range of numerical values.
+
+```{r}
+boxplot(glucose ~ diabetes, data = PimaIndiansDiabetes,
+        xlab = "Diabetes",
+        ylab = "Glucose concentration",
+        col = c("lightblue", "pink"))
+
+boxplot(triceps ~ diabetes, data = PimaIndiansDiabetes,
+        xlab = "Diabetes",
+        ylab = "Triceps skinfold thickness",
+        col = c("lightblue", "pink"))
+
+boxplot(age ~ diabetes, data = PimaIndiansDiabetes,
+        xlab = "Diabetes",
+        ylab = "Age",
+        col = c("lightblue", "pink"))
+
+boxplot(pressure ~ diabetes, data = PimaIndiansDiabetes,
+        xlab = "Diabetes",
+        ylab = "Diastolic blood pressure",
+        col = c("lightblue", "pink"))
+```
+
+1º box plot: Even though there are outliers in the non-diabetic group with extremely high glucose levels, Diabetic individuals (positive class) have higher median glucose levels than non-diabetic individuals. This suggests glucose concentration is a strong indicator of diabetes, because most non-diabetics have lower glucose levels.
+
+2º box plot: A few outliers in the diabetic group have very high skinfold thickness values. Also, the median values for both groups (diabetic and non-diabetic) seem relatively close, suggesting that triceps skinfold thickness may not be a strong differentiator between diabetics and non-diabetics.
+
+3º box plot: The median age for the diabetic group is higher than for non-diabetics. In other words, there are more older individuals in the diabetic group, while younger individuals are more common in the non-diabetic group. We can conlude that age plays a role in diabetes risk, with older individuals being more susceptible.
+
+4º box plot: The distributions of diastolic blood pressure are similar for both groups.There are outliers with extremely low or high blood pressure values in both groups. This suggests blood pressure alone may not be a strong predictor of diabetes, but it could still be relevant when combined with other factors.
+
+```{r}
+# Check the structure of the diabetes column
+str(PimaIndiansDiabetes$diabetes)
+#it's a factor 
+
+# Convert Factor to Numeric Properly
+PimaIndiansDiabetes$diabetes <- as.numeric(PimaIndiansDiabetes$diabetes) - 1
+```
+
+Here, we are checking the structure of the diabetes column using `str()`, which reveals that it is a factor variable. Since factors are stored as categorical data in R, we need to convert it into a numeric format for analysis. The conversion `as.numeric(PimaIndiansDiabetes$diabetes) - 1` ensures that the values are properly transformed, changing the factor levels from 1, 2 (default in R) to 0, 1, where 0 represents "neg" (negative for diabetes) and 1 represents "pos" (positive for diabetes).
+
+```{r}
+
+# Replace 0 values with NA in specific columns
+cols_with_zeros <- c("glucose", "pressure", "triceps", "insulin", "mass")
+PimaIndiansDiabetes[, cols_with_zeros] <- lapply(PimaIndiansDiabetes[, cols_with_zeros], 
+                                                 function(x) ifelse(x == 0, NA, x))
+
+# Compute correlation matrix (excluding 'pregnant' variable)
+cor_matrix <- cor(PimaIndiansDiabetes[, c("glucose", "pressure", "triceps", 
+                                          "insulin", "mass", "pedigree", "age", "diabetes")], 
+                  use = "pairwise.complete.obs")
+
+library(ggcorrplot)
+
+# Plot the correlation matrix
+ggcorrplot(cor_matrix, method = "square", lab = TRUE, title = "Correlation Matrix (Pima Indians Diabetes)")
+```
+
+The correlation matrix for the Pima Indians Diabetes dataset provides valuable insights into the relationships between various medical attributes and diabetes diagnosis.
+
+Among all variables, glucose levels exhibit the strongest positive correlation (0.4947) with diabetes, suggesting that higher plasma glucose concentrations are closely associated with a higher likelihood of diabetes. This aligns with the known role of glucose metabolism in diabetes development.
+
+Body mass index (0.3137) and insulin levels (0.3035) also show moderate positive correlations, indicating that individuals with higher body mass index and elevated insulin levels are more likely to have diabetes. These findings highlight the influence of weight and insulin regulation in diabetes risk.
+
+Triceps skinfold thickness (0.2595) and age (0.2384) have weaker yet notable correlations, implying that increased body fat percentage and aging may contribute to diabetes risk, but their predictive power is lower compared to glucose and Body mass index.
+
+On the other hand, diastolic blood pressure (0.1706) and diabetes pedigree function (0.1738) show only weak correlations, meaning that while family history and blood pressure might have some influence, they are not strong individual predictors of diabetes in this dataset.
+
+Overall, glucose emerges as the most significant factor in diabetes prediction, followed by Body mass index and insulin, while age, skinfold thickness, and blood pressure play a secondary role. Understanding these relationships can aid in identifying high-risk individuals and developing targeted interventions for diabetes prevention.
+
+```{r}
+# Set appropriate margins to avoid "figure margins too large" error
+par(mar = c(4, 4, 2, 1))  # Adjust margins
+
+# Arrange plots in a grid (change if needed)
+par(mfrow = c(2, 3))  
+
+# Select only the relevant columns (excluding 'pregnant' and 'diabetes')
+selected_columns <- c("glucose", "pressure", "triceps", "insulin", "mass", "pedigree", "age")
+
+# Generate histograms
+for (col in selected_columns) {
+  hist(PimaIndiansDiabetes[[col]], main = paste("Histogram of", col), 
+       xlab = col, col = "lightblue", border = "black", breaks = 30)
+}
+
+```
+
+Most variables in the dataset do not follow a normal distribution, with blood pressure and BMI being the closest to normal. Glucose, triceps skinfold, insulin, diabetes pedigree, and age all exhibit right-skewed distributions, indicating that transformations such as log or square root scaling may be useful for normalizing the data.
+
+#### Exercise 1.b: Hypothesis test on the mean
+
+Consider one of the variables for one of the classes of patients and formulate an hypothesis of the type $H_0: \, {\rm E}(X_i)=\mu_0$ versus $H_1: \, {\rm E}(X_i) \neq \mu_0$. Decide based on the p-value. State any distributional assumptions considered. Discuss the adequacy of such assumptions. Exclude missing values.
+
+```{r}
+
+diabetic1_data <- subset(PimaIndiansDiabetes, diabetes == 1)
+print(diabetic1_data)
+
+diabetic_glucose <- diabetic1_data$glucose[diabetic1_data$glucose > 0]
+
+diabetic_glucose <- na.omit(diabetic1_data$glucose)
+summary(diabetic_glucose)
+length(diabetic_glucose)
+```
+
+We consider the glucose levels of diabetic patients and formulate the following hypothesis:
+
+$H_0 : E(X_i)=140$ versus $H_1:  E(X_i)\neq 140$
+
+$140$ mg/dL is chosen as a reference threshold for testing whether the population mean is significantly different.
+
+```{r}
+# Normality test
+shapiro.test(diabetic_glucose)
+```
+
+The t-test assumes that the data follows a normal distribution or that the sample size is large (e.g., 30 or more). According to the Central Limit Theorem, for large samples, the distribution of the sample mean is approximately normal, even if the individual data points are not normally distributed. In this case, the data is not normally distributed (as indicated by the Shapiro test, which returned a p-value \< 0.05), but the sample size is large ($268$ observations). Because of this, we will use the t-test:
+
+```{r}
+t.test(diabetic_glucose, mu = 140, alternative = "two.sided")
+```
+
+The p-value \> 0.05, so we fail to reject H₀: there is no strong statistical evidence that the mean glucose level of diabetic patients $140$ mg/dL.
+
+#### Exercise 1.c: Hypothesis test for a difference in means
+
+Compare the two groups of patients, using the variable chosen in the previous question. State any distributional assumptions considered. Decide based on the p-value. Discuss the adequacy of such assumptions. Exclude missing values.
+
+```{r}
+t.test(glucose ~ diabetes, data = PimaIndiansDiabetes)
+```
+
+We test whether the mean glucose levels differ significantly between diabetic and non-diabetic patients:
+
+$H_0: E(X_{diabetic}) = E(X_{non-diabetic})$
+
+$H_1: E(X_{diabetic}) \neq E(X_{non-diabetic})$
+
+Since the p-value \< 0.05, we reject $H_0$: the average glucose levels differ significantly between diabetic and non-diabetic patients.
+
+### Exercise 2: Power function
+
+Let $X \sim {\cal N}(\mu,\sigma^2=1)$, $\boldsymbol{X}=(X_1,\ldots,X_n)^\top$ be a random sample, and $(x_1,\ldots,x_n)^\top$ one possible realization of $\boldsymbol{X}$. Consider the statistical hypothesis: $H_0: \, {\rm E}(X_i)=0$ versus $H_1: \, {\rm E}(X_i) \neq 0$. Build a plot of the associated power functions, considering a significance level $\alpha=0.05$ and a sample size $n=100$.
+
+Repeat the exercise considering the alternative values: $\alpha=0.10$; $n=1000$, and $\mu_0=13$. Compare your results.
+
+```{r}
+library(ggplot2)
+
+n <- 100 
+z_alpha_half <- 1.96 #qnorm(1 - 0.05 / 2)
+mu_values <- seq(-1, 1, length.out = 100) 
+
+power_function <- function(mu, n, z_alpha_half) {
+  p1 <- 1 - pnorm(z_alpha_half - mu * sqrt(n))
+  p2 <- pnorm(-z_alpha_half - mu * sqrt(n))
+  return(p1 + p2)
+}
+
+power_values <- sapply(mu_values, power_function, n=n, z_alpha_half=z_alpha_half)
+
+df <- data.frame(mu = mu_values, power = power_values)
+
+# Plot the power function
+ggplot(df, aes(x = mu, y = power)) +
+  geom_line(color = "blue", size = 1) +
+  geom_hline(yintercept = alpha, linetype = "dashed", color = "red") +
+  labs(title = "Power Function",
+       x = expression(mu),
+       y = "Power") +
+  theme_minimal()
+```
+
+```{r}
+n <- 1000
+alpha <- 0.10
+z_alpha_half <- qnorm(1 - alpha / 2)
+mu_0 <- 13  # Null hypothesis mean
+
+# Function to compute power considering mu_0 = 13
+power_function <- function(mu, n, z_alpha_half, mu_0) {
+  p1 <- 1 - pnorm(z_alpha_half - (mu - mu_0) * sqrt(n))
+  p2 <- pnorm(-z_alpha_half - (mu - mu_0) * sqrt(n))
+  return(p1 + p2)
+}
+
+# Define range of mu values (centered around mu_0)
+mu_values <- seq(12, 14, length.out = 100)
+
+# Compute power values
+power_values <- sapply(mu_values, power_function, n=n, z_alpha_half=z_alpha_half, mu_0=mu_0)
+
+# Create data frame for plotting
+df <- data.frame(mu = mu_values, power = power_values)
+
+# Plot the power function
+ggplot(df, aes(x = mu, y = power)) +
+  geom_line(color = "blue", size = 1) +
+  geom_hline(yintercept = alpha, linetype = "dashed", color = "red") +
+  labs(title = "Power Function",
+       x = expression(mu),
+       y = "Power") +
+  theme_minimal()
+```
+
+The red dashed line represents the significance level ($\alpha = 0.05$ in the first plot and $\alpha = 0.10$ in the second plot), which corresponds to the probability of rejecting the null hypothesis when it is actually true.
+
+In the first plot, the power function reaches its lowest value at $\mu = 0$, which corresponds to the null hypothesis. As $\mu$ deviates from zero, the power function increases symmetrically, indicating that the test is more likely to reject the null hypothesis as the true mean moves further away from $0$.
+
+In the second plot, we observe a similar pattern, with the lowest value of the power function occurring at $\mu = 13$, the null hypothesis. However, the increase in power as $\mu$ moves away from $13$ is more abrupt compared to the first plot. This reflects the combined effect of the larger sample size ($n=1000$) and the higher significance level ($\alpha=0.10$), which lead to a more rapid increase in power as deviations from the null hypothesis become more detectable. This, in turn, increases the probability of rejecting the null hypothesis compared to the first scenario, making the test more sensitive to departures from the null hypothesis.
+
+------------------------------------------------------------------------
+
+### Exercise 3: Theoretical versus empirical power function
+
+Fix a seed using command `set.seed`. Generate $m=100$ samples of size $n \in \{10,30,100,500,1\ 000,10\ 000,100\ 000\}$ from $X \sim {\cal N}(\mu,\sigma^2=1)$ with $\mu=0$. Test the hypothesis $H_0: \, {\rm E}(X_i)=0$ versus $H_1: \, {\rm E}(X_i) \neq 0$ at a $\alpha=0.05$ significance level. Count the number of times you did not reject the null hypothesis for this significance level.
+
+-   Consider other values of $\mu \in \{0.1,0.2,\ldots,1.5\}$ and repeat the previous simulation study.
+-   Plot the estimated power functions and compare with the theoretical ones.
+
+```{r}
+
+set.seed(123)
+
+library(ggplot2)
+
+z_alpha_half <- 1.96 
+mu_values <- seq(0, 1.5, by = 0.1)
+n_values <- c(10, 30, 100, 500, 1000, 10000, 100000)
+m <- 100  
+
+theoretical_power <- function(mu, n, z_alpha_half) {
+  p1 <- 1 - pnorm(z_alpha_half - mu * sqrt(n))
+  p2 <- pnorm(-z_alpha_half - mu * sqrt(n))
+  return(p1 + p2)
+}
+
+results <- data.frame()
+
+# Simulation study
+for (n in n_values) {
+  for (mu in mu_values) {
+    reject_count <- 0
+    
+    for (i in 1:m) {
+      sample <- rnorm(n, mean = mu, sd = 1)
+      sample_mean <- mean(sample)
+      
+      # Correct test statistic
+      test_statistic <- sample_mean * sqrt(n)  # Since sigma = 1
+      
+      # Correct rejection condition
+      if (abs(test_statistic) > z_alpha_half) {
+        reject_count <- reject_count + 1
+      }
+    }
+    
+    estimation <- reject_count / m
+    theoretical_power_value <- theoretical_power(mu, n, z_alpha_half)
+    
+    results <- rbind(results, data.frame(n = n, mu = mu, 
+                                         estimation = estimation,
+                                         theoretical_power = theoretical_power_value))
+  }
+}
+
+results$n <- as.factor(results$n)
+
+# Plot estimation vs theoretical power
+ggplot(results, aes(x = mu, color = n)) +
+  geom_line(aes(y = estimation, linetype = "Estimation"), size = 1) +
+  geom_line(aes(y = theoretical_power, linetype = "Theoretical"), size = 1, alpha = 0.7) +
+  labs(title = "Estimation vs. Theoretical Power Function",
+       x = expression(mu),
+       y = "Power",
+       color = "Sample Size (n)",
+       linetype = "Power Type") +
+  scale_linetype_manual(values = c("Estimation" = "solid", "Theoretical" = "dashed")) +
+  theme_minimal()
+```

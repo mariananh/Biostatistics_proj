@@ -1,0 +1,314 @@
+---
+title: 'Lab 4: Regression Analysis'
+author: "M. Rosário Oliveira & Catarina Loureiro - Biostatistics (LMAC/MECD/MMAC)"
+date: "`r format(Sys.time(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    extra_dependencies:
+      caption: labelfont={bf}
+      hyperref: null
+      xcolor: null
+---
+
+------------------------------------------------------------------------
+
+Report your answers to the following questions in an R Markdown file. Submit your answers by the 15th of May 2025, 23:59, on the Fenix webpage.
+
+Add your group number and the students' name and number of its members in the file:
+
+-   **Group Number:**
+
+-   **Name and Number - Group Member 1: Mariana Henriques 103165**
+
+-   **Name and Number - Group Member 2:**
+
+------------------------------------------------------------------------
+
+Consider the following dataset available at: <https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who>.
+
+### Statistical Analysis on factors influencing Life Expectancy
+
+Consider the life expectancy available in the given dataset as the response variable. Use the 2014 data and remove any country with missing values from your analysis.
+
+1.  Find the best multiple linear regression model based on these data. When fitting your regression model, take into consideration the following topics:
+
+> -   *Model adequacy checking.*
+>
+> -   *Existence of outliers.*
+>
+> -   *Validation of the model assumptions.*
+>
+> -   *Multicollinearity problems.*
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(car)
+
+df <- read.csv("/Users/marianahenriques/Documents/Life_Expectancy_Data.csv", header = TRUE)
+
+# 2014 data
+df_2014 <- subset(df, Year == 2014)
+
+#colSums(is.na(df_2014)) #seeing the missing values
+
+# Remove rows with any missing values (NA)
+df_2014_clean <- na.omit(df_2014)
+
+df_2014_clean <- df_2014_clean[, -2]
+
+# In status, developing is replaced by 0 and developed by 1
+df_2014_clean[, 2] <- ifelse(df_2014_clean[, 2] == "Developed", 1, 0)
+
+```
+
+```{r}
+
+## MODEL 1
+
+model_full <- lm(Life.expectancy ~ ., data = df_2014_clean[, -which(names(df_2014_clean) %in% c("Country"))])
+summary(model_full)
+```
+
+Here’s a clear explanation of each component in the regression summary output:
+
+-   Residual Standard Error: reflects the typical distance between the actual life expectancy values and those predicted by the model. A lower value suggests that the model's predictions are close to the observed data, indicating a good fit. The degrees of freedom indicate the number of data points available after accounting for the model's complexity.
+
+-   Multiple R-squared: shows that the model explains the vast majority of the variation in life expectancy across countries. This means that the chosen explanatory variables collectively account for most of the differences observed in life expectancy.
+
+-   Adjusted R-squared: corrects for the number of explanatory variables included in the model. It shows that even after adjusting for the number of predictors, the model still maintains a very strong explanatory power. This ensures that the high performance of the model is not simply due to overfitting.
+
+-   F-statistic and p-value: the F-statistic tests whether the regression model, as a whole, is statistically significant. The result indicates that there is very strong evidence that at least one of the independent variables contributes meaningfully to explaining life expectancy. The extremely small p-value supports this conclusion, confirming the overall significance of the model.
+
+```{r}
+## Shapiro test checks whether the residuals of your regression model are normally distributed, which is one of the key assumptions of linear regression.
+
+shapiro.test(resid(model_full))
+```
+
+Model_full (no outlier removal or VIF filtering):
+
+Normality: Rejected (p \< 0.01) High R-squared, but residual error relatively large. Comment: Strong explanatory power, but assumption violations suggest model unreliability.
+
+```{r}
+
+## MODEL 2
+
+## Cook's Distance - Finding out outliers
+
+plot(cooks.distance(model_full), type="h", main="Cook's Distance")
+
+# Total number of observations in our dataset
+n <- nrow(df_2014_clean)
+
+cooksD <- cooks.distance(model_full)
+
+# Cutoff threshold
+cutoff <- 4 / n
+
+# Indices of influential observations (outliers)
+influential_indices <- which(cooksD > cutoff)
+
+# View the indices of the outliers
+influential_indices
+
+# Removing the outliers
+df_no_outliers <- df_2014_clean[-influential_indices, ]
+
+## Regression Model after removing the outliers
+model_no_outliers <- lm(Life.expectancy ~ ., data = df_no_outliers[, !names(df_refined) %in% c("Country")])
+summary(model_no_outliers)
+
+shapiro.test(resid(model_no_outliers))
+```
+
+Model_no_outliers (outliers removed using Cook’s Distance):
+
+Normality: Acceptable (p \> 0.05)
+
+Slight drop in R-squared, lower residual error.
+
+Comment: improved residual behavior and acceptable normality.
+
+```{r}
+
+## MODEL 3
+
+
+# Variance Inflation Factor (cheking the variables with importance). 
+
+# We should remove the variables with very high multicollinearity, which corresponds to a high VIF value
+
+vif(model_full)
+
+vars_to_remove <- c("infant.deaths", "under.five.deaths")
+
+df_refined <- df_no_outliers[, !names(df_no_outliers) %in% vars_to_remove]
+
+model_refined <- lm(Life.expectancy ~ ., data = df_refined[, !names(df_refined) %in% c("Country")])
+summary(model_refined)
+
+shapiro.test(resid(model_refined))
+```
+
+Model_refined (model_no_outliers with multicollinearity removed via VIF):
+
+Normality: Clearly acceptable (p \> 0.4)
+
+Slight increase in R-squared, further reduction in residual error. Comment: Better model parsimony and reduced redundancy; most balanced so far.
+
+```{r}
+
+## MODEL 4
+
+
+## Ransac, other way to remove the outliers (alternative for cook's distance)
+
+# 1. Define your predictors and outcome
+df_model <- df_2014_clean[, !names(df_2014_clean) %in% c("Country")]
+x <- df_model[, -which(names(df_model) == "Life.expectancy")]
+y <- df_model$Life.expectancy
+
+# 2. Use the RANSAC concept: sample, fit, and find inliers
+set.seed(123)
+n <- nrow(df_model)
+threshold <- 3  # residual threshold
+inliers_final <- NULL
+best_fit <- NULL
+max_inliers <- 0
+
+for (i in 1:200) {
+  sample_idx <- sample(1:n, size = round(0.7 * n))  # random 70% sample
+  model <- lm(Life.expectancy ~ ., data = df_model[sample_idx, ])
+  preds <- predict(model, newdata = df_model)
+  residuals <- abs(preds - df_model$Life.expectancy)
+  
+  inliers <- which(residuals < threshold)
+  if (length(inliers) > max_inliers) {
+    max_inliers <- length(inliers)
+    inliers_final <- inliers
+    best_fit <- model
+  }
+}
+
+# 3. Filter dataset to keep only inliers
+df_ransac_clean <- df_model[inliers_final, ]
+
+# 4. Refit model
+model_ransac <- lm(Life.expectancy ~ ., data = df_ransac_clean)
+summary(model_ransac)
+
+shapiro.test(resid(model_ransac))
+```
+
+Model_ransac (outliers removed via RANSAC; all variables retained)
+
+Normality: Acceptable (p \> 0.3)
+
+Highest R-squared so far, very low residual error.
+
+Comment: Promising model; better than Model 2, though still includes multicollinearity risk.
+
+```{r}
+
+## MODEL 5 
+
+
+# We should remove the variables with very high multicollinearity, which corresponds to VIF range > 10 
+vif(model_ransac)
+
+#The under.five.death variable was removed due to high multicollinearity with infant.deaths
+
+#Although conceptually important, GDP was removed because it showed high multicollinearity with other socioeconomic indicators already included in the model.
+
+vars_to_remove <- c("under.five.deaths", "GDP","percentage.expenditure")
+
+
+df_ransac_refined <- df_ransac_clean[, !names(df_ransac_clean) %in% vars_to_remove]
+
+model_ransac_refined <- lm(Life.expectancy ~ ., data = df_ransac_refined[, !names(df_ransac_refined) %in% c("Country")])
+summary(model_ransac_refined)
+
+shapiro.test(resid(model_ransac_refined))
+```
+
+Model_ransac_refined (RANSAC outliers removed + high-VIF variables removed):
+
+Normality: Acceptable (p \> 0.2)
+
+Excellent balance of fit, parsimony, and assumption validity.
+
+Comment: Slightly lower R-squared than Model 4, but better model interpretability and robustness.
+
+```{r}
+
+## MODEL 6
+
+df_thinness_combined <- df_ransac_refined
+
+# Create the new combined thinness variable
+df_thinness_combined$thinness_combined <- rowMeans(
+  df_thinness_combined[, c("thinness..1.19.years", "thinness.5.9.years")],
+  na.rm = TRUE
+)
+
+# Remove the original thinness columns from the new dataframe
+df_thinness_combined <- df_thinness_combined[, !names(df_thinness_combined) %in% c("thinness..1.19.years", "thinness.5.9.years")]
+
+
+model_thinness_combined <- lm(Life.expectancy ~ ., data = df_thinness_combined[, !names(df_thinness_combined) %in% c("Country")])
+summary(model_thinness_combined)
+
+shapiro.test(resid(model_thinness_combined))
+
+```
+
+2.  Present the final fitted model. Justify your choice.
+
+The model 5 emerges as the best model overall. It demonstrates:
+
+-   A very strong fit with high explanatory power.
+-   Acceptable residual normality, fulfilling a key regression assumption.
+-   Reduced multicollinearity through careful variable selection, enhancing the model's stability and interpretability.
+-   Outlier handling via a robust method (RANSAC), improving model generalizability.
+
+3.  Choose one explanatory variable in your model and interpret the fitted regression coefficient.
+
+    Choosing the variable Alcohol, we know the following:
+
+    -   Estimate: –0.06034
+
+    -   p-value: 0.28683 (not statistically significant)
+
+    The variable Alcohol represents the per capita alcohol consumption in a country. The estimated regression coefficient for Alcohol is negative, indicating that holding all other variables constant, an increase in alcohol consumption by one unit is associated with a decrease of approximately 0.06 years in life expectancy.
+
+    However, this coefficient is not statistically significant, meaning that there is insufficient evidence to conclude that alcohol consumption has a meaningful linear association with life expectancy in this dataset. The lack of significance may be due to variability in consumption patterns across countries, cultural or regional factors, or the presence of other confounding variables in the model.
+
+    Despite the theoretical expectation that higher alcohol use negatively affects health outcomes, this result suggests that, in this model and sample, alcohol consumption does not independently explain a significant portion of the variation in life expectancy once other factors are accounted for.
+
+4.  Use your model to compute the 95% confidence interval for the life expectancy of Portugal.
+
+    ```{r}
+
+    # Ensure you're using the same columns and transformations as your model
+    portugal_data <- df_2014_clean[df_2014_clean$Country == "Portugal", ]
+
+    # Remove "Country" and any variables that were removed for modeling
+    portugal_data <- portugal_data[, !(names(portugal_data) %in% vars_to_remove)]
+
+
+    predict(model_ransac_refined, newdata = portugal_data, interval = "confidence", level = 0.95)
+
+    ```
+
+Using the final regression model (model_ransac_refined), the estimated life expectancy for Portugal in the year 2014 is approximately 78.93 years. The 95% confidence interval for this estimate ranges from 77.08 to 80.79 years.
+
+This means that, based on Portugal’s socioeconomic and health-related indicators in 2014 and assuming the model is correctly specified, we can be 95% confident that the true average life expectancy in Portugal lies within this interval.
